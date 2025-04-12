@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Shortener</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles if needed */
+        body {
+            font-family: 'Inter', sans-serif; /* Using Inter font as recommended */
+        }
+        /* Add subtle transition for better UX */
+        #result-box, #error-box {
+            transition: opacity 0.3s ease-in-out;
+        }
+        /* Style for copy button feedback */
+        .copied-feedback {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #4CAF50; /* Green */
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            margin-bottom: 5px;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .copy-button:hover .copied-feedback.show {
+             opacity: 1;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white p-8 md:p-12 rounded-xl shadow-lg w-full max-w-xl">
+        <h1 class="text-3xl md:text-4xl font-bold text-center text-gray-800 mb-8">URL Shortener</h1>
+
+        <form id="shorten-form" class="space-y-4">
+            <div>
+                <label for="url-input" class="block text-sm font-medium text-gray-700 mb-1">Enter Long URL:</label>
+                <input type="url" id="url-input" name="url" placeholder="https://example.com/very/long/url/..." required
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out">
+            </div>
+            <button type="submit" id="submit-button"
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-150 ease-in-out disabled:opacity-50">
+                Shorten URL
+            </button>
+        </form>
+
+        <div id="loading" class="text-center mt-6 hidden">
+            <svg class="animate-spin h-6 w-6 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="text-sm text-gray-600 mt-2">Shortening...</p>
+        </div>
+
+        <div id="result-box" class="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg hidden opacity-0">
+            <h2 class="text-lg font-semibold text-green-800 mb-2">Success!</h2>
+            <p class="text-sm text-gray-700 mb-1">Original URL:</p>
+            <p id="original-url" class="text-sm text-gray-600 break-all mb-3"></p>
+            <p class="text-sm text-gray-700 mb-1">Shortened URL:</p>
+            <div class="flex items-center justify-between bg-white p-2 border rounded-md">
+                <a id="short-url-link" href="#" target="_blank" class="text-indigo-600 hover:text-indigo-800 font-medium break-all mr-2"></a>
+                <button id="copy-button" class="copy-button relative bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-medium py-1 px-2 rounded transition duration-150 ease-in-out">
+                    Copy
+                    <span class="copied-feedback">Copied!</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="error-box" class="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg hidden opacity-0">
+            <h2 class="text-lg font-semibold text-red-800 mb-2">Error</h2>
+            <p id="error-message" class="text-sm text-red-700"></p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('shorten-form');
+        const urlInput = document.getElementById('url-input');
+        const submitButton = document.getElementById('submit-button');
+        const loadingIndicator = document.getElementById('loading');
+        const resultBox = document.getElementById('result-box');
+        const errorBox = document.getElementById('error-box');
+        const originalUrlElement = document.getElementById('original-url');
+        const shortUrlLink = document.getElementById('short-url-link');
+        const errorMessageElement = document.getElementById('error-message');
+        const copyButton = document.getElementById('copy-button');
+        const copiedFeedback = copyButton.querySelector('.copied-feedback');
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent default form submission
+
+            const longUrl = urlInput.value.trim();
+            if (!longUrl) {
+                showError('Please enter a URL.');
+                return;
+            }
+
+            // --- UI Updates: Start Loading ---
+            submitButton.disabled = true;
+            loadingIndicator.classList.remove('hidden');
+            resultBox.classList.add('hidden');
+            errorBox.classList.add('hidden');
+            resultBox.style.opacity = '0';
+            errorBox.style.opacity = '0';
+
+
+            try {
+                // Make API call to the backend /shorten endpoint
+                const response = await fetch('/shorten', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json' // Indicate we prefer JSON response
+                    },
+                    body: JSON.stringify({ url: longUrl })
+                });
+
+                const data = await response.json(); // Always parse JSON first
+
+                if (!response.ok) {
+                    // Handle HTTP errors (4xx, 5xx)
+                    // Use error message from API response if available, otherwise use status text
+                    throw new Error(data.error || `HTTP error! Status: ${response.status} ${response.statusText}`);
+                }
+
+                // --- Success ---
+                showResult(data.original_url, data.short_url);
+
+            } catch (error) {
+                // --- Error Handling ---
+                console.error('Error shortening URL:', error);
+                // Display user-friendly error message
+                showError(error.message || 'An unexpected error occurred. Please try again.');
+
+            } finally {
+                // --- UI Updates: End Loading ---
+                submitButton.disabled = false;
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+
+        // --- Copy to Clipboard Functionality ---
+        copyButton.addEventListener('click', () => {
+            const urlToCopy = shortUrlLink.href;
+            navigator.clipboard.writeText(urlToCopy).then(() => {
+                // Show feedback
+                copiedFeedback.classList.add('show');
+                // Hide feedback after a short delay
+                setTimeout(() => {
+                    copiedFeedback.classList.remove('show');
+                }, 1500);
+            }).catch(err => {
+                console.error('Failed to copy URL: ', err);
+                // Optionally show an error message to the user
+            });
+        });
+
+
+        // --- Helper Functions for UI ---
+        function showResult(originalUrl, shortUrl) {
+            originalUrlElement.textContent = originalUrl;
+            shortUrlLink.href = shortUrl;
+            shortUrlLink.textContent = shortUrl;
+            errorBox.classList.add('hidden');
+            errorBox.style.opacity = '0';
+            resultBox.classList.remove('hidden');
+            // Use setTimeout to allow the 'hidden' class removal to render before starting transition
+            setTimeout(() => {
+                 resultBox.style.opacity = '1';
+            }, 10); // Small delay
+        }
+
+        function showError(message) {
+            errorMessageElement.textContent = message;
+            resultBox.classList.add('hidden');
+             resultBox.style.opacity = '0';
+            errorBox.classList.remove('hidden');
+             // Use setTimeout for transition
+             setTimeout(() => {
+                 errorBox.style.opacity = '1';
+            }, 10); // Small delay
+        }
+
+    </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# URL Shortener Web Service (v2)
+# URL Shortener Web Service 
 
 A simple, robust, and scalable URL shortener web service built with Python, Flask, and Redis, including a basic web frontend.
 
